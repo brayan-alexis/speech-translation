@@ -7,55 +7,53 @@ using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Translation;
 
-string SPEECH__SUBSCRIPTION_KEY = ""; // Your subscription key
-string SPEECH__REGION = ""; // Your subscription service region
 
-var translationConfig = SpeechTranslationConfig.FromSubscription(SPEECH__SUBSCRIPTION_KEY, SPEECH__REGION);
-var fromLanguage = "es-MX";
-var toLanguages = new List<string> { "en-US", "fr", "de" };
-translationConfig.SpeechRecognitionLanguage = fromLanguage;
-toLanguages.ForEach(translationConfig.AddTargetLanguage);
 
-var audioConfig = AudioConfig.FromDefaultMicrophoneInput();
-var speechRecognizer = new SpeechRecognizer(translationConfig, audioConfig);
+Console.WriteLine("Starting...");
+await TranslateSpeechToTextAsync();
 
-speechRecognizer.Recognizing += (s, e) =>
+static async Task TranslateSpeechToTextAsync()
 {
-    Console.WriteLine($"RECOGNIZING: Text={e.Result.Text}");
-};
-speechRecognizer.Recognized += (s, e) =>
-{
-    var result = e.Result;
-    Console.WriteLine($"RECOGNIZED: Text={result.Text}");
-};
-speechRecognizer.Canceled += (s, e) =>
-{
-    Console.WriteLine($"CANCELED: Reason={e.Reason}");
-    if (e.Reason == CancellationReason.Error)
+    string SPEECH__SUBSCRIPTION_KEY = ""; // Your subscription key
+    string SPEECH__REGION = ""; // Your subscription service region
+
+    var translationConfig = SpeechTranslationConfig.FromSubscription(SPEECH__SUBSCRIPTION_KEY, SPEECH__REGION);
+    var fromLanguage = "es-MX";
+    var toLanguages = new List<string> { "en-US", "fr", "de" };
+    translationConfig.SpeechRecognitionLanguage = fromLanguage;
+    toLanguages.ForEach(translationConfig.AddTargetLanguage);
+
+    using var recognizer = new TranslationRecognizer(translationConfig);
+    Console.WriteLine("Say something in: " + fromLanguage);
+    Console.WriteLine($"We'll translate into '{string.Join("', '", toLanguages)}'.\n");
+    var result = await recognizer.RecognizeOnceAsync();
+    if (result.Reason == ResultReason.TranslatedSpeech)
     {
-        Console.WriteLine($"CANCELED: ErrorCode={e.ErrorCode}");
-        Console.WriteLine($"CANCELED: ErrorDetails={e.ErrorDetails}");
-        Console.WriteLine($"CANCELED: Did you update the subscription info?");
+        Console.WriteLine($"Recognized: \"{result.Text}\":");
+        foreach (var (language, translation) in result.Translations)
+        {
+            Console.WriteLine($"Translated into '{language}': {translation}");
+        }
     }
-};
-speechRecognizer.SessionStarted += (s, e) =>
-{
-    Console.WriteLine("\n    Session started event.");
-};
-speechRecognizer.SessionStopped += (s, e) =>
-{
-    Console.WriteLine("\n    Session stopped event.");
-};
-speechRecognizer.SpeechStartDetected += (s, e) =>
-{
-    Console.WriteLine("\n    SpeechStartDetected event.");
-};
-speechRecognizer.SpeechEndDetected += (s, e) =>
-{
-    Console.WriteLine("\n    SpeechEndDetected event.");
-};
-Console.WriteLine("Say something...");
-speechRecognizer.StartContinuousRecognitionAsync().Wait();
-Console.WriteLine("Press any key to stop");
-Console.ReadKey();
-speechRecognizer.StopContinuousRecognitionAsync().Wait();
+    else if (result.Reason == ResultReason.RecognizedSpeech)
+    {
+        Console.WriteLine($"Recognized: {result.Text}");
+    }
+    else if (result.Reason == ResultReason.NoMatch)
+    {
+        Console.WriteLine($"NOMATCH: Speech could not be recognized.");
+    }
+    else if (result.Reason == ResultReason.Canceled)
+    {
+        var cancellation = CancellationDetails.FromResult(result);
+        Console.WriteLine($"CANCELED: Reason={cancellation.Reason}");
+        if (cancellation.Reason == CancellationReason.Error)
+        {
+            Console.WriteLine($"CANCELED: ErrorCode={cancellation.ErrorCode}");
+            Console.WriteLine($"CANCELED: ErrorDetails={cancellation.ErrorDetails}");
+            Console.WriteLine($"CANCELED: Did you update the subscription info?");
+        }
+    }
+
+
+}
